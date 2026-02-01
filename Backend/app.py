@@ -81,16 +81,19 @@ def run():
     if is_linux:
         compile_cmd.append("-lpthread")
 
-    cp = subprocess.run(compile_cmd, capture_output=True)
-
-    if cp.returncode != 0:
-        return jsonify({"output": cp.stderr.decode(), "gantt": []})
-
     try:
+        cp = subprocess.run(compile_cmd, capture_output=True)
+        if cp.returncode != 0:
+            return jsonify({"output": cp.stderr.decode(), "gantt": []})
+
         runp = subprocess.run(exe, capture_output=True, cwd=BASE, timeout=5)
         output = runp.stdout.decode()
+    except FileNotFoundError:
+        return jsonify({"output": "Error: GCC compiler not found in system PATH.", "gantt": []})
     except subprocess.TimeoutExpired as e:
         output = (e.stdout.decode() if e.stdout else "") + "\n[PROGRAM TIMED OUT AFTER 5s]"
+    except Exception as e:
+        return jsonify({"output": f"Unexpected Error: {str(e)}", "gantt": []})
 
     log_content = ""
     if os.path.exists(LOGFILE):
