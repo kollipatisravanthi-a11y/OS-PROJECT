@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# C / Build
+*.exe
+*.o
+*.out
+Backend/temp/
+Backend/output/
+Backend/app.c
+Backend/program.c
+scheduler_log.txt
+Backend/scheduler_log.txt
+
+# OS / IDE
+.vscode/
+.DS_Store
+Thumbs.db
