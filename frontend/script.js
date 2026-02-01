@@ -2,34 +2,15 @@ const code = document.getElementById("code");
 const lines = document.getElementById("lineNumbers");
 const highlight = document.getElementById("highlight");
 
-// ===== Default C Code =====
-code.value = `#include <stdio.h>
-#include "uthread.h"
-
-void task(void *arg) {
-    int id = *(int*)arg;
-    for(int i=0;i<5;i++) {
-        printf("Thread %d running\\n", id);
-        uthread_yield();
-    }
-    uthread_exit();
-}
-
-int main() {
-    uthread_init();
-    int a=0,b=1,c=2;
-    uthread_create(task,&a,2);
-    uthread_create(task,&b,1);
-    uthread_create(task,&c,3);
-    uthread_start();
-    return 0;
-}`;
-
-// ===== Editor Line Numbers & Highlighting =====
+// ===== Editor Logic =====
 function updateLines() {
     const count = code.value.split("\n").length;
     lines.textContent = "";
-    for (let i = 1; i <= count; i++) lines.textContent += i + "\n";
+    for (let i = 1; i <= count; i++) {
+        const span = document.createElement("div");
+        span.textContent = i;
+        lines.appendChild(span);
+    }
     updateHighlight();
 }
 
@@ -38,43 +19,17 @@ function updateHighlight() {
     highlight.scrollTop = code.scrollTop;
 }
 
-code.addEventListener("input", () => {
-    code.value = code.value.replace(/^(\d+\s*\n)+/, '');
-    updateLines();
-});
-
+code.addEventListener("input", updateLines);
 code.addEventListener("scroll", () => {
     lines.scrollTop = code.scrollTop;
     highlight.scrollTop = code.scrollTop;
 });
 
-updateLines();
-
-// ===== Backend Actions =====
-// ===== Tabs =====
-function showTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-    event.currentTarget.classList.add('active');
-    document.getElementById(tabName + 'Tab').classList.add('active');
-}
-
-// ===== Reset =====
-function reset() {
-    code.value = templates.basic;
-    updateLines();
-    document.getElementById("schedulerLog").textContent = "";
-    document.getElementById("threadOutput").textContent = "";
-    document.getElementById("agingLog").textContent = "";
-    document.getElementById("gantt").innerHTML = "";
-}
-
-// ===== Backend Actions =====
+// ===== Kernel Actions =====
 function run() {
     const runBtn = document.getElementById("runBtn");
     runBtn.disabled = true;
-    runBtn.textContent = "⌛ Running...";
+    runBtn.textContent = "Running...";
 
     fetch("/run", {
         method: "POST",
@@ -84,131 +39,156 @@ function run() {
         .then(res => res.json())
         .then(data => {
             runBtn.disabled = false;
-            runBtn.textContent = "▶ Run";
+            runBtn.textContent = "▶ Execute Kernel";
 
-            parseLogs(data.output, data.scheduler_log);
+            if (data.metrics) updateUI(data.metrics, data.scheduler_log);
             if (data.gantt) drawGantt(data.gantt);
+
+            document.getElementById("threadOutput").textContent = data.output;
         })
         .catch(err => {
             runBtn.disabled = false;
-            runBtn.textContent = "▶ Run";
-            alert("Execution failed: " + err);
+            runBtn.textContent = "▶ Execute Kernel Trace";
+            alert("Kernel Panic: " + err);
         });
 }
 
-function parseLogs(threadOut, schedulerIn) {
-    const scheduler = document.getElementById("schedulerLog");
-    const threads = document.getElementById("threadOutput");
-    const aging = document.getElementById("agingLog");
+function updateUI(m, log) {
+    // Metrics
+    document.getElementById("metric-wait").textContent = m.avg_wait + "ms";
+    document.getElementById("metric-turnaround").textContent = m.avg_turnaround + "ms";
+    document.getElementById("metric-throughput").textContent = m.throughput;
+    document.getElementById("metric-faults").textContent = m.page_faults;
 
+    // Deadlock Alert
+    const lockStatus = document.getElementById("lockStatus");
+    if (m.deadlock) {
+        lockStatus.innerHTML = '<span style="color:var(--neon-red); font-weight:bold;">⚠️ DEADLOCK DETECTED! Circular wait identified in Resource Graph.</span>';
+    } else {
+        lockStatus.textContent = "All resources operational. No circular dependencies.";
+    }
+
+    // Logs & Visuals
+    const scheduler = document.getElementById("schedulerLog");
+    const aging = document.getElementById("agingLog");
     scheduler.textContent = "";
-    threads.textContent = threadOut;
     aging.textContent = "";
 
-    if (!schedulerIn) return;
+    let lastMLFQ = "";
+    let ioThreads = [];
+    let memoryMappings = [];
 
-    const lines = schedulerIn.split('\n');
-    lines.forEach(line => {
+    log.split('\n').forEach(line => {
         if (!line.trim()) return;
         const parts = line.split(' ');
-        if (parts.length < 3) return;
-
         const thread = parts[1];
         const action = parts.slice(2).join(' ');
 
-        const formattedLine = `[${thread}] ${action}`;
+        if (action.includes("MLFQ:")) lastMLFQ = action;
+        if (action.includes("DISK_IO_START")) ioThreads.push(thread);
+        if (action.includes("DISK_IO_DONE")) ioThreads = ioThreads.filter(t => t !== thread);
 
-        if (action.includes("AGING") || action.includes("RQ:")) {
-            aging.textContent += formattedLine + "\n";
-        } else if (action.includes("PREEMPTED_TICK")) {
-            scheduler.textContent += "[TICK EVENT] " + formattedLine + "\n";
+        if (action.includes("PAGE_FAULT_MAPPED")) {
+            const pPage = action.split("->P:")[1];
+            memoryMappings.push({ thread, pPage });
+        }
+
+        if (action.includes("MLFQ") || action.includes("SYSTEM")) {
+            aging.textContent += `[KERN] ${thread}: ${action}\n`;
         } else {
-            scheduler.textContent += formattedLine + "\n";
+            scheduler.textContent += `[TASK] ${thread}: ${action}\n`;
         }
     });
 
-    if (threads.textContent.trim().length > 0) {
-        // Optional: showTab('threads');
-    }
+    drawMLFQ(lastMLFQ);
+    drawIO(ioThreads);
+    drawMemoryMap(memoryMappings);
 }
 
-function pause() { fetch("/pause", { method: "POST" }); }
-function resume() { fetch("/resume", { method: "POST" }); }
-function stop() { fetch("/stop", { method: "POST" }); }
+function drawMLFQ(mlfqStr) {
+    ["q0", "q1", "q2"].forEach(q => {
+        const div = document.getElementById(q);
+        const label = q.startsWith("q0") ? "Q0 (RR)" : q.startsWith("q1") ? "Q1 (RR)" : "Q2 (FCFS)";
+        div.innerHTML = `<div class="queue-label">${label}</div>`;
 
-// ===== Gantt Chart =====
-const actionColors = {
-    "RUNNING": "#16a34a",
-    "PREEMPTED_TICK": "#dc2626",
-    "YIELD": "#2563eb",
-    "BLOCKED": "#ea580c",
-    "UNBLOCKED": "#9333ea",
-    "FINISHED": "#777",
-    "CREATED": "#f59e0b",
-    "START": "#64748b"
-};
+        const match = mlfqStr.match(new RegExp(`${q.toUpperCase()}\\[(.*?)\\]`));
+        if (match && match[1].trim()) {
+            match[1].trim().split(' ').forEach(t => {
+                const token = document.createElement("div");
+                token.className = "thread-token";
+                token.textContent = t;
+                div.appendChild(token);
+            });
+        }
+    });
+}
+
+function drawIO(threads) {
+    const div = document.getElementById("io_wait");
+    div.innerHTML = '<div class="queue-label">DISK</div>';
+    threads.forEach(t => {
+        const token = document.createElement("div");
+        token.className = "thread-token";
+        token.style.background = "var(--neon-orange)";
+        token.textContent = t;
+        div.appendChild(token);
+    });
+}
+
+function drawMemoryMap(mappings) {
+    const grid = document.getElementById("physicalMemory");
+    grid.innerHTML = "";
+    for (let i = 0; i < 8; i++) {
+        const page = document.createElement("div");
+        page.className = "memory-page";
+        const owner = mappings.find(m => parseInt(m.pPage) === i);
+        if (owner) {
+            page.classList.add("active");
+            page.innerHTML = `<span style="color:var(--neon-blue)">PAGE ${i}</span><span style="font-size:10px">${owner.thread}</span>`;
+        } else {
+            page.innerHTML = `<span style="opacity:0.3">PAGE ${i}</span><span style="font-size:8px; opacity:0.1">EMPTY</span>`;
+        }
+        grid.appendChild(page);
+    }
+}
 
 function drawGantt(gantt) {
     const box = document.getElementById("gantt");
     box.innerHTML = "";
-
-    if (!gantt || gantt.length === 0) return;
-
     const totalTime = gantt.reduce((sum, t) => sum + t.time, 0);
 
     gantt.forEach(t => {
         const d = document.createElement("div");
-        d.className = "block" + (t.action === "CREATED" ? " mini-block" : "");
-        d.style.background = actionColors[t.action] || "#999";
-
+        d.className = "block";
         const widthPercent = (t.time / totalTime * 100);
-        d.style.width = `calc(${widthPercent}% - 2px)`;
-        d.style.minWidth = "30px";
+        d.style.width = `calc(${widthPercent}% - 3px)`;
+        d.style.minWidth = "20px";
 
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = t.name;
-        d.appendChild(nameSpan);
+        // Dynamic Coloring
+        if (t.action.includes("RUNNING")) d.style.background = "#16a34a";
+        else if (t.action.includes("MLFQ_DOWNGRADE")) d.style.background = "#dc2626";
+        else if (t.action.includes("DISK_IO")) d.style.background = "#ea580c";
+        else if (t.action.includes("BLOCKED")) d.style.background = "#9333ea";
+        else if (t.action.includes("UNBLOCKED")) d.style.background = "#2563eb";
+        else d.style.background = "#777";
 
-        const timeSpan = document.createElement("span");
-        timeSpan.className = "duration";
-        timeSpan.textContent = `(${t.time})`;
-        d.appendChild(timeSpan);
+        const name = document.createElement("span");
+        name.textContent = t.name;
+        d.appendChild(name);
 
-        d.title = `${t.name} - ${t.action} (${t.time} units)`;
+        d.title = `${t.name}: ${t.action} (${t.time}μs)`;
         box.appendChild(d);
     });
 }
 
 // ===== Templates =====
 const templates = {
-    basic: `#include <stdio.h>
+    mlfq: `#include <stdio.h>
 #include "uthread.h"
-
-#define HIGH_PRIORITY 10
-#define LOW_PRIORITY 1
-
-void task(void *arg) {
-    printf("Hello from a user thread!\\n");
-    uthread_exit();
-}
-
-int main() {
-    uthread_init();
-    uthread_create(task, NULL, HIGH_PRIORITY);
-    uthread_start();
-    return 0;
-}`,
-    priority: `#include <stdio.h>
-#include "uthread.h"
-
-// Demonstrates AGING: Low-priority threads eventually run.
-#define HIGH_PRIORITY 20
-#define LOW_PRIORITY 1
 
 void worker(void *arg) {
-    char *name = (char*)arg;
     for(int i=0; i<3; i++) {
-        printf("[Thread %s] Priority-based execution\\n", name);
+        printf("%s working...\\n", (char*)arg);
         for(volatile int j=0; j<80000000; j++); // Busy work
     }
     uthread_exit();
@@ -216,77 +196,103 @@ void worker(void *arg) {
 
 int main() {
     uthread_init();
-    uthread_create(worker, "High-P", HIGH_PRIORITY);
-    uthread_create(worker, "Low-P", LOW_PRIORITY);
+    uthread_create(worker, "LongTask", 0); // Will downgrade
+    uthread_create(worker, "QuickTask", 0);
     uthread_start();
     return 0;
 }`,
-    preemption: `#include <stdio.h>
+    paging: `#include <stdio.h>
 #include "uthread.h"
 
-// Demonstrates PREEMPTION: High-P thread interrupts Low-P.
-void slow_worker(void *arg) {
-    printf("Low-P starting long task...\\n");
-    for(volatile int j=0; j<500000000; j++); // Very long task
-    printf("Low-P finished.\\n");
-    uthread_exit();
-}
-
-void quick_higher_p(void *arg) {
-    printf("--- HIGHER-P INTERRUPTED! ---\\n");
+void loader(void *arg) {
+    printf("Requesting 4KB pages...\\n");
+    uthread_malloc(4096);
+    uthread_malloc(4096);
+    for(volatile int j=0; j<50000000; j++);
     uthread_exit();
 }
 
 int main() {
     uthread_init();
-    // Low priority thread starts first
-    uthread_create(slow_worker, NULL, 1);
-    // Higher priority thread becomes ready
-    uthread_create(quick_higher_p, NULL, 10);
+    for(int i=0; i<5; i++) uthread_create(loader, NULL, 0);
     uthread_start();
     return 0;
 }`,
-    cooperative: `#include <stdio.h>
+    prod_cons: `#include <stdio.h>
 #include "uthread.h"
 
-// Demonstrates COOPERATIVE multitasking using uthread_yield().
-void item_processor(void *arg) {
-    int id = *(int*)arg;
-    for(int i=1; i<=3; i++) {
-        printf("Thread %d processing item %d\\n", id, i);
-        printf("Thread %d volunteering to YIELD...\\n", id);
-        uthread_yield(); // Voluntarily give up CPU
-    }
+uthread_sem_t mutex, full, empty;
+
+void producer(void *arg) {
+    uthread_sem_wait(&empty);
+    uthread_sem_wait(&mutex);
+    printf("Item Produced.\\n");
+    uthread_sem_post(&mutex);
+    uthread_sem_post(&full);
+    uthread_exit();
+}
+
+void consumer(void *arg) {
+    uthread_sem_wait(&full);
+    uthread_sem_wait(&mutex);
+    printf("Item Consumed.\\n");
+    uthread_sem_post(&mutex);
+    uthread_sem_post(&empty);
     uthread_exit();
 }
 
 int main() {
     uthread_init();
-    int a=1, b=2;
-    uthread_create(item_processor, &a, 5);
-    uthread_create(item_processor, &b, 5);
+    uthread_sem_init(&mutex, 1);
+    uthread_sem_init(&full, 0);
+    uthread_sem_init(&empty, 1);
+    uthread_create(producer, NULL, 1);
+    uthread_create(consumer, NULL, 1);
     uthread_start();
     return 0;
 }`,
-    mutex: `#include <stdio.h>
+    deadlock: `#include <stdio.h>
 #include "uthread.h"
 
-uthread_mutex_t m;
+uthread_sem_t s1, s2;
 
-void locked_task(void *arg) {
-    uthread_mutex_lock(&m);
-    printf("Thread %d got the mutex!\\n", *(int*)arg);
-    for(volatile int j=0; j<100000000; j++); // Simulate work
-    uthread_mutex_unlock(&m);
+void task_a(void *arg) {
+    uthread_sem_wait(&s1);
+    for(volatile int j=0; j<50000000; j++); 
+    uthread_sem_wait(&s2); // Circular Wait
+    uthread_exit();
+}
+
+void task_b(void *arg) {
+    uthread_sem_wait(&s2);
+    for(volatile int j=0; j<50000000; j++);
+    uthread_sem_wait(&s1); // Circular Wait
     uthread_exit();
 }
 
 int main() {
     uthread_init();
-    uthread_mutex_init(&m);
-    int a=1, b=2;
-    uthread_create(locked_task, &a, 1);
-    uthread_create(locked_task, &b, 1);
+    uthread_sem_init(&s1, 1);
+    uthread_sem_init(&s2, 1);
+    uthread_create(task_a, NULL, 0);
+    uthread_create(task_b, NULL, 0);
+    uthread_start();
+    return 0;
+}`,
+    disk_io: `#include <stdio.h>
+#include "uthread.h"
+
+void io_task(void *arg) {
+    printf("Requesting Disk block 102...\\n");
+    uthread_disk_io(102); // Blocks thread
+    printf("Disk Data Loaded!\\n");
+    uthread_exit();
+}
+
+int main() {
+    uthread_init();
+    uthread_create(io_task, NULL, 0);
+    uthread_create(io_task, NULL, 0);
     uthread_start();
     return 0;
 }`
@@ -299,7 +305,15 @@ function loadTemplate(type) {
     }
 }
 
-// ===== Dark/Light Theme =====
-function toggleTheme() {
-    document.body.classList.toggle("dark");
+function reset() { location.reload(); }
+function toggleTheme() { document.body.classList.toggle("light-mode"); }
+function showTab(t) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById(t + 'Tab').classList.add('active');
 }
+
+// Init
+loadTemplate('mlfq');
+drawMemoryMap([]);

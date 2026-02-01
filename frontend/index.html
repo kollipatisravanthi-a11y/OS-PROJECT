@@ -9,26 +9,48 @@
 </head>
 
 <body>
-    <h1>Advanced Multi-Core Thread Visualizer</h1>
-    <h3 style="color: #666; font-weight: normal; margin-top: -15px;">System: Cross-Platform User-Level Scheduling Core
-    </h3>
+    <h1>User Level Thread Library</h1>
+    <p>A simulation environment for user-level threads, scheduling algorithms, and memory management.</p>
+
+    <!-- Metrics Section -->
+    <div class="metrics-dashboard">
+        <div class="metric-card">
+            <h4>Avg Wait Time</h4>
+            <div id="metric-wait" class="value">0ms</div>
+        </div>
+        <div class="metric-card">
+            <h4>Avg Turnaround</h4>
+            <div id="metric-turnaround" class="value">0ms</div>
+        </div>
+        <div class="metric-card">
+            <h4>Throughput</h4>
+            <div id="metric-throughput" class="value">0</div>
+        </div>
+        <div class="metric-card">
+            <h4>Page Faults</h4>
+            <div id="metric-faults" class="value">0</div>
+        </div>
+    </div>
 
     <div class="main-container">
         <div class="sidebar">
-            <h3>API Documentation</h3>
-            <ul>
-                <li><strong>uthread_init()</strong><br>Initializes the scheduler.</li>
-                <li><strong>uthread_create(func, arg, priority)</strong><br>Creates a new thread.</li>
-                <li><strong>uthread_start()</strong><br>Starts the scheduler.</li>
-                <li><strong>uthread_yield()</strong><br>Gives control back to scheduler.</li>
-                <li><strong>uthread_exit()</strong><br>Terminates the current thread.</li>
+            <h3>Library API</h3>
+            <ul style="padding-left: 15px;">
+                <li><strong>uthread_init()</strong><br>Boot the library kernel.</li>
+                <li><strong>uthread_create(f, a, p)</strong><br>Create thread (P=0,1,2).</li>
+                <li><strong>uthread_start()</strong><br>Start execution.</li>
+                <li><strong>uthread_exit()</strong><br>End thread context.</li>
+                <hr>
+                <li><strong>uthread_sem_wait(s)</strong><br>Wait (P operation).</li>
+                <li><strong>uthread_sem_post(s)</strong><br>Signal (V operation).</li>
+                <li><strong>uthread_malloc(size)</strong><br>Virtual memory alloc.</li>
             </ul>
             <h3>Code Templates</h3>
-            <button class="template-btn" onclick="loadTemplate('basic')">Basic Thread</button>
-            <button class="template-btn" onclick="loadTemplate('priority')">Priority Demo (Aging)</button>
-            <button class="template-btn" onclick="loadTemplate('preemption')">Preemption Demo</button>
-            <button class="template-btn" onclick="loadTemplate('cooperative')">Cooperative Yielding</button>
-            <button class="template-btn" onclick="loadTemplate('mutex')">Mutex Demo</button>
+            <button class="template-btn" onclick="loadTemplate('mlfq')">MLFQ Scheduling</button>
+            <button class="template-btn" onclick="loadTemplate('prod_cons')">Producer/Consumer</button>
+            <button class="template-btn" onclick="loadTemplate('paging')">Paging Demo</button>
+            <button class="template-btn" onclick="loadTemplate('deadlock')">Deadlock Scenario</button>
+            <button class="template-btn" onclick="loadTemplate('disk_io')">Disk I/O Latency</button>
         </div>
 
         <div class="editor-section">
@@ -39,41 +61,74 @@
             </div>
 
             <div class="controls">
-                <button id="runBtn" onclick="run()">▶ Run</button>
+                <button id="runBtn" onclick="run()"
+                    style="background: #22c55e; color: white; padding: 10px 20px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer;">▶
+                    Execute Simulation</button>
                 <button onclick="reset()">🔄 Reset</button>
-                <button onclick="pause()">⏸ Pause</button>
-                <button onclick="resume()">▶▶ Resume</button>
-                <button onclick="stop()">⏹ Stop</button>
-                <button onclick="toggleTheme()">🌙 Dark/Light</button>
+                <button onclick="toggleTheme()">🌙 Dark Mode</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visualization Grid -->
+    <div class="vis-grid">
+        <div class="vis-section">
+            <h3>Internal Ready Queues (MLFQ)</h3>
+            <div class="mlfq-container">
+                <div class="queue-row" id="q0">
+                    <div class="queue-label">Q0</div>
+                </div>
+                <div class="queue-row" id="q1">
+                    <div class="queue-label">Q1</div>
+                </div>
+                <div class="queue-row" id="q2">
+                    <div class="queue-label">Q2</div>
+                </div>
+            </div>
+
+            <div style="margin-top:20px;">
+                <h3>Disk Wait Queue</h3>
+                <div class="queue-row" id="io_wait">
+                    <div class="queue-label">I/O</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="vis-section">
+            <h3>Physical Memory Pages</h3>
+            <div class="memory-grid" id="physicalMemory">
+                <!-- Pages dynamic -->
+            </div>
+
+            <div id="lockStatus" style="margin-top:20px; font-style: italic; color: #666;">
+                Resource status: Clean.
             </div>
         </div>
     </div>
 
     <div class="output-tabs">
         <button class="tab-btn active" onclick="showTab('scheduler')">Scheduler Log</button>
-        <button class="tab-btn" onclick="showTab('threads')">Thread Output</button>
-        <button class="tab-btn" onclick="showTab('aging')">Aging & Queue</button>
-    </div>
-    <div id="schedulerTab" class="tab-content active">
-        <pre id="schedulerLog"></pre>
-    </div>
-    <div id="threadsTab" class="tab-content">
-        <pre id="threadOutput"></pre>
-    </div>
-    <div id="agingTab" class="tab-content">
-        <pre id="agingLog"></pre>
+        <button class="tab-btn" onclick="showTab('threads')">Program Output</button>
+        <button class="tab-btn" onclick="showTab('aging')">Pipeline Stats</button>
     </div>
 
-    <h3>Gantt Chart</h3>
+    <div id="schedulerTab" class="tab-content active" style="display: block;">
+        <pre id="schedulerLog" style="min-height: 150px;"></pre>
+    </div>
+    <div id="threadsTab" class="tab-content" style="display: none;">
+        <pre id="threadOutput" style="min-height: 150px;"></pre>
+    </div>
+    <div id="agingTab" class="tab-content" style="display: none;">
+        <pre id="agingLog" style="min-height: 150px;"></pre>
+    </div>
+
+    <h3 style="margin-top: 30px;">Gantt Chart (Execution Trace)</h3>
     <div class="legend">
         <span style="background:#16a34a">Running</span>
-        <span style="background:#dc2626">Preempted</span>
-        <span style="background:#2563eb">Yield</span>
-        <span style="background:#ea580c">Blocked</span>
-        <span style="background:#9333ea">Unblocked</span>
-        <span style="background:#777">Finished</span>
-        <span style="background:#f59e0b">Created</span>
-        <span style="background:#64748b">System Start</span>
+        <span style="background:#dc2626">Downgrade</span>
+        <span style="background:#ea580c">I/O Wait</span>
+        <span style="background:#9333ea">Sync Block</span>
+        <span style="background:#2563eb">Unblocked</span>
     </div>
     <div id="gantt"></div>
 

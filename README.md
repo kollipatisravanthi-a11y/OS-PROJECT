@@ -1,27 +1,29 @@
-# Advanced Multi-Core Thread Visualizer 🚀
+# User Level Thread Library: Advanced OS Simulation 🚀
 
-**Advanced Multi-Core Thread Visualizer** is a professional-grade OS simulator designed to visualize the internal mechanics of a User-Level Thread (ULT) library. It provides a real-time, interactive dashboard to observe scheduling decisions, preemption, and thread synchronization.
+**User Level Thread Library** is a high-fidelity Operating System simulator designed to visualize the internal mechanics of a modern kernel. Beyond basic thread management, this version implements sophisticated subsystems including **MLFQ Scheduling**, **Virtual Memory MMU**, and **Resource Graphing**.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Advanced OS Features
 
-- **Cross-Platform Scheduling Core:** Support for both **Windows Fibers** and **POSIX ucontext (Linux)**.
-- **Dynamic Thread Dashboard:** Includes a real-time **Gantt Chart** and specialized log categories.
-- **Sophisticated Scheduling:** Implements Priority-based scheduling with **Aging** and **Preemptive interrupts**.
-- **Interactive Code Editor:** Write, compile, and run C code directly in the browser.
-- **Educational Templates:** One-click demos for Preemption, Mutex locking, and Cooperative yielding.
-- **Ready Queue Visibility:** Real-time logging of the Ready Queue state and thread priority changes.
+- **Multi-Level Feedback Queue (MLFQ):** A dynamic scheduler that manages 3 levels of queues (Q0, Q1, Q2). Threads are automatically downgraded based on CPU quantum consumption and periodically boosted to prevent starvation.
+- **Virtual Memory & Paging MMU:** Simulates a hardware-level Memory Management Unit. Observe **Page Tables** mapping virtual addresses to **Physical RAM** slots, and watch **Page Faults** trigger in real-time.
+- **True Blocking Synchronization:** Implements semaphores with a blocked-queue state. Unlike basic spin-locks, threads are completely removed from the CPU while waiting, optimizing system throughput.
+- **Disk I/O Subsystem:** Simulates asynchronous I/O operations. Threads can enter a `DISK_WAIT` state, allowing the scheduler to run other tasks while "hardware" I/O completes.
+- **Resource Graph & Deadlock Detection:** Real-time tracking of semaphore ownership. The system can identify circular wait patterns and alert the user to potential deadlocks.
+- **Executive Metrics Dashboard:** Real-time tracking of:
+    - **Avg Wait Time:** Measures ready-queue latency.
+    - **Avg Turnaround:** Tracks the full thread lifecycle.
+    - **Page Fault Count:** Monitors memory pressure and mapping efficiency.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Backend Logic:** C (Windows/Linux System APIs)
-- **Server:** Python / Flask
-- **Frontend:** Vanilla HTML5, CSS3, JavaScript
-- **Code Highlighting:** PrismJS
-- **Data Visualization:** Custom CSS Grid-based Gantt Chart
+- **Kernel Logic:** C (Windows Fibers / POSIX ucontext)
+- **Middleware:** Python 3.9+ / Flask
+- **Display Engine:** Vanilla HTML5 / Modern CSS / JavaScript
+- **Instrumentation:** High-precision telemetry logging (Microsecond accuracy)
 
 ---
 
@@ -36,47 +38,37 @@
 
 ### Installation
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/OS-Thread-Visualizer.git
-    cd OS-Thread-Visualizer
-    ```
-
-2.  Install dependencies:
+1.  Clone the repository and install requirements:
     ```bash
     pip install -r requirements.txt
     ```
 
-3.  Run the application:
+2.  Run the application:
     ```bash
     python Backend/app.py
     ```
 
-4.  Open your browser and navigate to `http://127.0.0.1:5000`.
+3.  Open your browser and navigate to `http://127.0.0.1:5000`.
 
 ---
 
-## 📊 How It Works
+## 📊 System Architecture
 
-The system utilizes a hybrid architecture:
-1.  **The C Core:** Manages the Thread Control Blocks (TCB), handles context switching using system-level primitives, and logs microsecond-level events to a local file.
-2.  **The Python Flask API:** Receives C code from the UI, executes the compiler, manages process timeouts (5s safety), and parses the raw logs into JSON.
-3.  **The JS Interface:** Dynamically renders the Gantt chart and distributes logs into "Scheduler", "Thread Output", and "Aging/Queue" tabs for analysis.
-
----
-
-## 🛡️ Educational Demos
-
-- **Priority (Aging):** Observe how low-priority threads are boosted to prevent starvation.
-- **Preemption:** Witness a high-priority interrupt "stop" a running thread in its tracks.
-- **Mutex Demo:** See how lock contention affects the Gantt chart and thread states.
+The simulation utilizes a 3-layer architecture:
+1.  **The C Kernel:** Manages TCBs, context switching, MLFQ logic, and MMU paging. It logs all "Kernel Events" to a telemetry file.
+2.  **The Data Processor (Python):** Compiles user code on-the-fly, executes the binary, and performs post-run analytics to calculate wait times and detect deadlocks from the logs.
+3.  **The Visualizer (JS):** Animates the internal state including the **Gantt Chart**, **MLFQ Queues**, and **Physical Memory Map**.
 
 ---
 
-## 📜 License
+## 📜 Educational Scenarios
 
-This project was developed for educational purposes as part of an Operating Systems final project.
+Navigate to the **Library API** sidebar to load specialized templates:
+- **MLFQ Scheduling:** Watch the priority downgrade logic in action.
+- **Paging Demo:** Observe how threads occupy physical RAM pages.
+- **Producer/Consumer:** A classic synchronization puzzle with true blocking semaphores.
+- **Deadlock Scenario:** Intentionally create a circular wait to see the detection system trigger.
 
 ---
 
-*“Visualizing the heartbeat of the Operating System.”*
+*“Visualizing the complex heartbeat of modern Operating Systems.”*
