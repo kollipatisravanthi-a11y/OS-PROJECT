@@ -1,3 +1,4 @@
 Flask==3.1.0
+gunicorn==23.0.0
 PrismJS==1.30.0
 # Note: This project also requires GCC and Windows OS due to Windows Fiber API usage.
