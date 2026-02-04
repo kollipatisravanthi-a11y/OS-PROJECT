@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
-import subprocess, os, uuid
+import subprocess, os, uuid, shutil
 
 app = Flask(__name__)
 
@@ -19,12 +19,12 @@ def home():
 def frontend_files(path):
     return send_from_directory(FRONTEND, path)
 
-def parse_logs():
-    if not os.path.exists(LOGFILE):
+def parse_logs(log_path=LOGFILE):
+    if not os.path.exists(log_path):
         return [], {}
 
     lines = []
-    with open(LOGFILE) as f:
+    with open(log_path) as f:
         for line in f:
             parts = line.strip().split(' ', 2)
             if len(parts) >= 3:
@@ -121,14 +121,19 @@ def parse_logs():
 @app.route("/run", methods=["POST"])
 def run():
     code = request.json["code"]
-    src = os.path.join(TEMP, f"{uuid.uuid4()}.c")
-    exe = src.replace(".c", "")
+    
+    # Create unique run directory for this request
+    run_id = str(uuid.uuid4())
+    run_dir = os.path.join(TEMP, run_id)
+    os.makedirs(run_dir, exist_ok=True)
+    
+    src = os.path.join(run_dir, "program.c")
+    exe = os.path.join(run_dir, "program")
+    # Log file will be created in the CWD (run_dir)
+    run_log = os.path.join(run_dir, "scheduler_log.txt")
 
     with open(src, "w") as f:
         f.write(code)
-
-    if os.path.exists(LOGFILE):
-        os.remove(LOGFILE)
 
     import platform
     is_linux = platform.system() == "Linux"
@@ -140,9 +145,11 @@ def run():
     try:
         cp = subprocess.run(compile_cmd, capture_output=True)
         if cp.returncode != 0:
+            shutil.rmtree(run_dir, ignore_errors=True)
             return jsonify({"output": cp.stderr.decode(), "gantt": [], "metrics": {}})
 
-        runp = subprocess.run(exe, capture_output=True, cwd=BASE, timeout=5)
+        # Run with CWD = run_dir so scheduler_log.txt is written there
+        runp = subprocess.run(exe, capture_output=True, cwd=run_dir, timeout=5)
         output = runp.stdout.decode()
     except FileNotFoundError:
         return jsonify({"output": "Error: GCC compiler not found in system PATH.", "gantt": [], "metrics": {}})
@@ -152,11 +159,16 @@ def run():
         return jsonify({"output": f"Unexpected Error: {str(e)}", "gantt": [], "metrics": {}})
 
     log_content = ""
-    if os.path.exists(LOGFILE):
-        with open(LOGFILE, "r") as f:
+    if os.path.exists(run_log):
+        with open(run_log, "r") as f:
             log_content = f.read()
 
-    gantt, metrics = parse_logs()
+    # Pass the specific log file to parse_logs
+    gantt, metrics = parse_logs(run_log)
+    
+    # Cleanup
+    shutil.rmtree(run_dir, ignore_errors=True)
+
     return jsonify({
         "output": output,
         "gantt": gantt,
