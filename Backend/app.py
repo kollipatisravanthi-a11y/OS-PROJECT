@@ -146,17 +146,17 @@ def run():
         cp = subprocess.run(compile_cmd, capture_output=True)
         if cp.returncode != 0:
             shutil.rmtree(run_dir, ignore_errors=True)
-            return jsonify({"output": cp.stderr.decode(), "gantt": [], "metrics": {}})
+            return jsonify({"output": cp.stderr.decode(), "gantt": [], "metrics": {}, "scheduler_log": ""})
 
         # Run with CWD = run_dir so scheduler_log.txt is written there
         runp = subprocess.run(exe, capture_output=True, cwd=run_dir, timeout=5)
         output = runp.stdout.decode()
     except FileNotFoundError:
-        return jsonify({"output": "Error: GCC compiler not found in system PATH.", "gantt": [], "metrics": {}})
+        return jsonify({"output": "Error: GCC compiler not found in system PATH.", "gantt": [], "metrics": {}, "scheduler_log": ""})
     except subprocess.TimeoutExpired as e:
         output = (e.stdout.decode() if e.stdout else "") + "\n[PROGRAM TIMED OUT AFTER 5s]"
     except Exception as e:
-        return jsonify({"output": f"Unexpected Error: {str(e)}", "gantt": [], "metrics": {}})
+        return jsonify({"output": f"Unexpected Error: {str(e)}", "gantt": [], "metrics": {}, "scheduler_log": ""})
 
     log_content = ""
     if os.path.exists(run_log):

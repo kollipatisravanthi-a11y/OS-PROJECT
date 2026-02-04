@@ -54,6 +54,9 @@ function run() {
 }
 
 function updateUI(m, log) {
+    // Default log to empty string if undefined to prevent split errors
+    log = log || "";
+
     // Metrics
     document.getElementById("metric-wait").textContent = m.avg_wait + "ms";
     document.getElementById("metric-turnaround").textContent = m.avg_turnaround + "ms";
