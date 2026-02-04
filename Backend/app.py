@@ -28,6 +28,9 @@ def parse_logs():
         for line in f:
             parts = line.strip().split(' ', 2)
             if len(parts) >= 3:
+                # Filter out SYSTEM events to unclutter Gantt chart
+                if parts[1] == "SYSTEM":
+                    continue
                 lines.append((int(parts[0]), parts[1], parts[2]))
 
     if not lines:

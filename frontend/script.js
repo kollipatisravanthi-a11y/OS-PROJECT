@@ -176,7 +176,9 @@ function drawGantt(gantt) {
         name.textContent = t.name;
         d.appendChild(name);
 
-        d.title = `${t.name}: ${t.action} (${t.time}μs)`;
+        const timeMs = (t.time / 1000).toFixed(3);
+        d.title = `${t.name}: ${t.action} (${timeMs}ms)`;
+        d.onclick = () => alert(`Thread: ${t.name}\nAction: ${t.action}\nDuration: ${timeMs}ms`);
         box.appendChild(d);
     });
 }
@@ -306,7 +308,7 @@ function loadTemplate(type) {
 }
 
 function reset() { location.reload(); }
-function toggleTheme() { document.body.classList.toggle("light-mode"); }
+function toggleTheme() { document.body.classList.toggle("dark"); }
 function showTab(t) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));

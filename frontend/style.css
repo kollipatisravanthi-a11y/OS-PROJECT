@@ -243,9 +243,14 @@ body.dark .queue-row {
 }
 
 .tab-content {
+    display: none;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     padding: 0;
+}
+
+.tab-content.active {
+    display: block;
 }
 
 body.dark .tab-content {
